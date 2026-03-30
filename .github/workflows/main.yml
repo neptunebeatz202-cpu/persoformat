@@ -1,0 +1,230 @@
+name: Build PersoFormant
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ============================================================
+  # Windows — VST3 + NSIS Installer
+  # ============================================================
+  build-windows:
+    name: Windows VST3 Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-win-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            juce-win-
+
+      - name: Configure CMake (Release, VST3 only on Windows)
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DJUCE_BUILD_EXAMPLES=OFF `
+            -DJUCE_BUILD_EXTRAS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Collect VST3 artifact
+        shell: pwsh
+        run: |
+          $vst3Dir = "artifacts\VST3"
+          New-Item -ItemType Directory -Force -Path $vst3Dir
+          # JUCE outputs to build\PersoFormant_artefacts\Release\VST3
+          $src = Get-ChildItem -Recurse -Path build -Filter "PersoFormant.vst3" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($src) {
+            Copy-Item -Recurse -Force $src.FullName $vst3Dir
+            Write-Host "Copied VST3 from $($src.FullName)"
+          } else {
+            Write-Host "VST3 not found, searching..."
+            Get-ChildItem -Recurse -Path build | Where-Object { $_.Name -like "*.vst3" } | ForEach-Object { Write-Host $_.FullName }
+          }
+
+      - name: Create NSIS installer script
+        shell: pwsh
+        run: |
+          $nsis = @"
+          !define PRODUCT_NAME "PersoFormant"
+          !define PRODUCT_VERSION "1.0.0"
+          !define COMPANY "Chobits"
+          !define VST3_DIR "`$PROGRAMFILES64\Common Files\VST3"
+
+          Name "`${PRODUCT_NAME} `${PRODUCT_VERSION}"
+          OutFile "PersoFormant-1.0.0-Windows.exe"
+          InstallDir "`${VST3_DIR}"
+          RequestExecutionLevel admin
+
+          Page directory
+          Page instfiles
+
+          Section "VST3 Plugin" SecVST3
+            SetOutPath "`$INSTDIR\PersoFormant.vst3\Contents\x86_64-win"
+            File /r "artifacts\VST3\PersoFormant.vst3\Contents\x86_64-win\*.*"
+          SectionEnd
+
+          Section "Uninstaller"
+            WriteUninstaller "`$INSTDIR\Uninstall_PersoFormant.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PersoFormant" "DisplayName" "`${PRODUCT_NAME}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PersoFormant" "UninstallString" "`$INSTDIR\Uninstall_PersoFormant.exe"
+          SectionEnd
+
+          Section "Uninstall"
+            Delete "`$INSTDIR\Uninstall_PersoFormant.exe"
+            RMDir /r "`${VST3_DIR}\PersoFormant.vst3"
+          SectionEnd
+          "@
+          $nsis | Out-File -FilePath installer.nsi -Encoding utf8
+
+      - name: Build NSIS installer
+        run: makensis installer.nsi
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-Windows-Installer
+          path: PersoFormant-1.0.0-Windows.exe
+          if-no-files-found: warn
+
+      - name: Upload VST3 (raw)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-Windows-VST3
+          path: artifacts/VST3
+          if-no-files-found: warn
+
+  # ============================================================
+  # macOS — VST3 + AU + PKG Installer
+  # ============================================================
+  build-macos:
+    name: macOS VST3 + AU Installer
+    runs-on: macos-14   # Apple Silicon runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake ninja
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-mac-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            juce-mac-
+
+      - name: Configure CMake (Release, VST3 + AU)
+        run: |
+          cmake -B build -S . \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DJUCE_BUILD_EXAMPLES=OFF \
+            -DJUCE_BUILD_EXTRAS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Collect plugin artifacts
+        run: |
+          mkdir -p artifacts/VST3 artifacts/AU
+
+          VST3=$(find build -name "PersoFormant.vst3" -type d 2>/dev/null | head -1)
+          if [ -n "$VST3" ]; then
+            cp -R "$VST3" artifacts/VST3/
+            echo "Collected VST3: $VST3"
+          else
+            echo "VST3 not found"
+            find build -name "*.vst3" 2>/dev/null
+          fi
+
+          AU=$(find build -name "PersoFormant.component" -type d 2>/dev/null | head -1)
+          if [ -n "$AU" ]; then
+            cp -R "$AU" artifacts/AU/
+            echo "Collected AU: $AU"
+          else
+            echo "AU not found"
+            find build -name "*.component" 2>/dev/null
+          fi
+
+      - name: Build macOS PKG installer
+        run: |
+          # Prepare VST3 component
+          if [ -d "artifacts/VST3/PersoFormant.vst3" ]; then
+            mkdir -p pkg_root/VST3
+            cp -R artifacts/VST3/PersoFormant.vst3 pkg_root/VST3/
+
+            pkgbuild \
+              --root pkg_root/VST3 \
+              --identifier com.chobits.persoformant.vst3 \
+              --version 1.0.0 \
+              --install-location "/Library/Audio/Plug-Ins/VST3" \
+              PersoFormant-vst3.pkg
+          fi
+
+          # Prepare AU component
+          if [ -d "artifacts/AU/PersoFormant.component" ]; then
+            mkdir -p pkg_root/AU
+            cp -R artifacts/AU/PersoFormant.component pkg_root/AU/
+
+            pkgbuild \
+              --root pkg_root/AU \
+              --identifier com.chobits.persoformant.au \
+              --version 1.0.0 \
+              --install-location "/Library/Audio/Plug-Ins/Components" \
+              PersoFormant-au.pkg
+          fi
+
+          # Combine into product archive
+          PKGS=""
+          [ -f "PersoFormant-vst3.pkg" ] && PKGS="$PKGS --package PersoFormant-vst3.pkg"
+          [ -f "PersoFormant-au.pkg"  ] && PKGS="$PKGS --package PersoFormant-au.pkg"
+
+          if [ -n "$PKGS" ]; then
+            productbuild \
+              $PKGS \
+              --identifier com.chobits.persoformant \
+              --version 1.0.0 \
+              PersoFormant-1.0.0-macOS.pkg
+            echo "PKG created."
+          else
+            echo "No plugins collected — skipping productbuild"
+          fi
+
+      - name: Upload macOS PKG installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-macOS-Installer
+          path: PersoFormant-1.0.0-macOS.pkg
+          if-no-files-found: warn
+
+      - name: Upload VST3 (raw)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-macOS-VST3
+          path: artifacts/VST3
+          if-no-files-found: warn
+
+      - name: Upload AU (raw)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-macOS-AU
+          path: artifacts/AU
+          if-no-files-found: warn
