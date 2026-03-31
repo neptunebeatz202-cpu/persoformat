@@ -816,7 +816,7 @@ void PersoFormantAudioProcessorEditor::paint(juce::Graphics& g)
     }
 
     // Spectrum visualiser
-    drawSpectrumVisualiser(g);
+    drawMorphVisualiser(g);
 
     // Envelope meter
     drawEnvelopeMeter(g);
