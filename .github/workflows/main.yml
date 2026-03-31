@@ -1,15 +1,5 @@
-name: Build PersoFormant
-
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
-
-jobs:
   build-windows:
-    name: Windows VST3 + Installer
+    name: Windows VST3 Installer
     runs-on: windows-latest
 
     steps:
@@ -17,18 +7,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install NSIS
-        shell: pwsh
-        run: choco install nsis -y --no-progress
+        run: choco install nsis --no-progress -y
 
       - name: Cache JUCE
         uses: actions/cache@v4
         with:
           path: build/_deps
           key: juce-win-${{ hashFiles('CMakeLists.txt') }}
-          restore-keys: juce-win-
+          restore-keys: |
+            juce-win-
 
-      - name: Configure CMake
-        shell: pwsh
+      - name: Configure CMake (Release, VST3 only on Windows)
         run: |
           cmake -B build -S . `
             -DCMAKE_BUILD_TYPE=Release `
@@ -36,7 +25,6 @@ jobs:
             -DJUCE_BUILD_EXTRAS=OFF
 
       - name: Build
-        shell: pwsh
         run: cmake --build build --config Release --parallel
 
       - name: Collect VST3 artifact
@@ -45,17 +33,67 @@ jobs:
           $vst3Dir = "artifacts\VST3"
           New-Item -ItemType Directory -Force -Path $vst3Dir | Out-Null
 
+          # JUCE outputs to build\PersoFormant_artefacts\Release\VST3\PersoFormant.vst3
           $src = Get-ChildItem -Recurse -Path build -Filter "PersoFormant.vst3" -ErrorAction SilentlyContinue | Select-Object -First 1
-
           if ($src) {
             Copy-Item -Recurse -Force $src.FullName $vst3Dir
             Write-Host "Copied VST3 from $($src.FullName)"
           } else {
-            Write-Error "PersoFormant.vst3 not found in build output."
+            Write-Host "VST3 not found, listing any *.vst3:"
+            Get-ChildItem -Recurse -Path build -Filter "*.vst3" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
             exit 1
           }
 
-      - name: Generate NSIS installer script
+      - name: Create NSIS installer script
         shell: pwsh
         run: |
           $nsis = @"
+!define PRODUCT_NAME "PersoFormant"
+!define PRODUCT_VERSION "1.0.0"
+!define COMPANY "Chobits"
+!define VST3_DIR "$PROGRAMFILES64\Common Files\VST3"
+
+Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
+OutFile "PersoFormant-1.0.0-Windows.exe"
+InstallDir "${VST3_DIR}"
+RequestExecutionLevel admin
+
+Page directory
+Page instfiles
+
+Section "VST3 Plugin" SecVST3
+  SetOutPath "$INSTDIR"
+  File /r "artifacts\VST3\PersoFormant.vst3"
+SectionEnd
+
+Section "Uninstall"
+  Delete "$INSTDIR\PersoFormant.vst3\*.*"
+  RMDir /r "$INSTDIR\PersoFormant.vst3"
+  Delete "$INSTDIR\Uninstall_PersoFormant.exe"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PersoFormant"
+SectionEnd
+
+Section -Post
+  WriteUninstaller "$INSTDIR\Uninstall_PersoFormant.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PersoFormant" "DisplayName" "${PRODUCT_NAME}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PersoFormant" "UninstallString" "$INSTDIR\Uninstall_PersoFormant.exe"
+SectionEnd
+"@
+          $nsis | Out-File -FilePath installer.nsi -Encoding ascii
+
+      - name: Build NSIS installer
+        run: makensis installer.nsi
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-Windows-Installer
+          path: PersoFormant-1.0.0-Windows.exe
+          if-no-files-found: warn
+
+      - name: Upload VST3 (raw)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersoFormant-Windows-VST3
+          path: artifacts/VST3
+          if-no-files-found: warn
