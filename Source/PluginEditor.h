@@ -40,7 +40,7 @@ private:
     void spawnStars(int n,float cx,float cy);
     void drawStarShape(juce::Graphics&,float cx,float cy,float r,float opacity,juce::Colour,int pts=5);
     void drawGlassPanel(juce::Graphics&,juce::Rectangle<float>,const juce::String&,juce::Colour accent);
-    void drawSpectrumVisualiser(juce::Graphics&);   // NEW — real EQ curve display
+    void drawMorphVisualiser(juce::Graphics& g);
     void drawEnvelopeMeter(juce::Graphics&);
     void drawChiEyeGlow(juce::Graphics&);
     void drawFloatingStars(juce::Graphics&);
