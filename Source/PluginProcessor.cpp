@@ -11,13 +11,13 @@ PersoFormantAudioProcessor::createParameterLayout()
     p.push_back(std::make_unique<juce::AudioParameterInt>  ("vowel1",          "Vowel 1",      0,11,0));
     p.push_back(std::make_unique<juce::AudioParameterInt>  ("vowel2",          "Vowel 2",      0,11,2));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("morph",           "Manual Morph",
-        juce::NormalisableRange<float>(0.f,1.f,0.001f),0.f));
+        juce::NormalisableRange<float>(0.f,1.f,0.001f),0.5f));
 
     // ---- LFO ----
     p.push_back(std::make_unique<juce::AudioParameterFloat>("lfoRate",   "LFO Rate",
         juce::NormalisableRange<float>(0.1f,10.f,0.01f,0.5f),1.f));
     p.push_back(std::make_unique<juce::AudioParameterFloat>("lfoDepth",  "LFO Depth",
-        juce::NormalisableRange<float>(0.f,1.f,0.001f),0.f));
+        juce::NormalisableRange<float>(0.f,1.f,0.001f),1.0f));
     p.push_back(std::make_unique<juce::AudioParameterBool> ("lfoSync",   "LFO Sync",   false));
     p.push_back(std::make_unique<juce::AudioParameterInt>  ("lfoDiv",    "LFO Division",0,5,3));
 
