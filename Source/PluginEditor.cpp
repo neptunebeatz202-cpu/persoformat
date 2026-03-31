@@ -631,113 +631,128 @@ void PersoFormantAudioProcessorEditor::drawSpectrumVisualiser(juce::Graphics& g)
 
     // ---- LFO rotating ring at top-right of visualiser ----
     {
-        float lfoPhase=audioProcessor.getLfoPhase();
-        float cx=VX+VW-22.f, cy=VY+22.f, dotR=14.f;
+        float lfoPhase = audioProcessor.getLfoPhase();
+        float cx = VX + VW - 22.f, cy = VY + 22.f, dotR = 14.f;
         juce::Path ring;
-        ring.addArc(cx-dotR,cy-dotR,dotR*2.f,dotR*2.f,
-                    lfoPhase-juce::MathConstants<float>::halfPi-1.5f,
-                    lfoPhase-juce::MathConstants<float>::halfPi,true);
+        ring.addArc(cx - dotR, cy - dotR, dotR * 2.f, dotR * 2.f,
+                    lfoPhase - juce::MathConstants<float>::halfPi - 1.5f,
+                    lfoPhase - juce::MathConstants<float>::halfPi, true);
         g.setColour(ChobitsLookAndFeel::starGold.withAlpha(0.60f));
-        g.strokePath(ring,juce::PathStrokeType(2.2f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
-        float dotX=cx+dotR*std::cos(lfoPhase-juce::MathConstants<float>::halfPi);
-        float dotY=cy+dotR*std::sin(lfoPhase-juce::MathConstants<float>::halfPi);
-        g.setColour(ChobitsLookAndFeel::pinkAccent); g.fillEllipse(dotX-3.5f,dotY-3.5f,7.f,7.f);
-        g.setColour(juce::Colours::white.withAlpha(0.9f)); g.fillEllipse(dotX-1.5f,dotY-1.5f,3.f,3.f);
+        g.strokePath(ring, juce::PathStrokeType(2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        float dotX = cx + dotR * std::cos(lfoPhase - juce::MathConstants<float>::halfPi);
+        float dotY = cy + dotR * std::sin(lfoPhase - juce::MathConstants<float>::halfPi);
+        g.setColour(ChobitsLookAndFeel::pinkAccent);
+        g.fillEllipse(dotX - 3.5f, dotY - 3.5f, 7.f, 7.f);
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.fillEllipse(dotX - 1.5f, dotY - 1.5f, 3.f, 3.f);
     }
 
     // ---- Cutoff offset indicator — vertical band showing offset direction ----
-    bool cutoffOn=(bool)(int)audioProcessor.apvts.getRawParameterValue("cutoffEnabled")->load();
-    if (cutoffOn) {
-        float offset=audioProcessor.apvts.getRawParameterValue("cutoffOffset")->load();
-        if (std::abs(offset)>5.f) {
-            // Draw a faint tinted region showing the shift direction
-            float refF=800.f; // reference "neutral" centre frequency
-            float refT=(std::log(refF)-std::log(fLo))/(std::log(fHi)-std::log(fLo));
-            float shiftedT=(std::log(refF+offset)-std::log(fLo))/(std::log(fHi)-std::log(fLo));
-            float x1=VX+juce::jmin(refT,shiftedT)*VW;
-            float x2=VX+juce::jmax(refT,shiftedT)*VW;
-            juce::Colour bandCol=(offset>0)?ChobitsLookAndFeel::starGold:ChobitsLookAndFeel::pinkAccent;
+    bool cutoffOn = (bool)(int)audioProcessor.apvts.getRawParameterValue("cutoffEnabled")->load();
+    if (cutoffOn)
+    {
+        float offset = audioProcessor.apvts.getRawParameterValue("cutoffOffset")->load();
+        if (std::abs(offset) > 5.f)
+        {
+            float refF = 800.f;
+            float refT = (std::log(refF) - std::log(fLo)) / (std::log(fHi) - std::log(fLo));
+            float shiftedT = (std::log(refF + offset) - std::log(fLo)) / (std::log(fHi) - std::log(fLo));
+            float x1 = VX + juce::jmin(refT, shiftedT) * VW;
+            float x2 = VX + juce::jmax(refT, shiftedT) * VW;
+
+            juce::Colour bandCol = (offset > 0) ? ChobitsLookAndFeel::starGold
+                                                : ChobitsLookAndFeel::pinkAccent;
+
             g.setColour(bandCol.withAlpha(0.12f));
-            g.fillRect(x1,VY+2.f,x2-x1,VH-4.f);
-            // Arrow showing direction
-            float arrowX=(offset>0)?x2-2.f:x1+2.f;
+            g.fillRect(x1, VY + 2.f, x2 - x1, VH - 4.f);
+
+            float arrowX = (offset > 0) ? x2 - 2.f : x1 + 2.f;
             g.setColour(bandCol.withAlpha(0.7f));
-            g.setFont(juce::Font("Georgia",11.f,juce::Font::bold));
-            g.drawText(offset>0?"\xe2\x86\x92":"\xe2\x86\x90",
-                       (int)(arrowX-8.f),(int)(midY-8.f),16,16,juce::Justification::centred);
+            g.setFont(juce::Font("Georgia", 11.f, juce::Font::bold));
+
+            // Unicode arrows (safe)
+            g.drawText(offset > 0 ? "\u2192" : "\u2190",
+                       (int)(arrowX - 8.f), (int)(midY - 8.f), 16, 16,
+                       juce::Justification::centred);
         }
-        // Cutoff ON label
-        g.setFont(juce::Font("Georgia",8.f,juce::Font::bold));
+
+        g.setFont(juce::Font("Georgia", 8.f, juce::Font::bold));
         g.setColour(ChobitsLookAndFeel::starGold.withAlpha(0.85f));
         g.drawText("CUTOFF ON",
-                   (int)VX+4,(int)(VY+VH-14.f),(int)VW-8,12,juce::Justification::right);
+                   (int)VX + 4, (int)(VY + VH - 14.f), (int)VW - 8, 12,
+                   juce::Justification::right);
     }
 
     // ---- Active LFO routing labels ----
     {
-        bool toMorph =(bool)(int)audioProcessor.apvts.getRawParameterValue("lfoToMorph") ->load();
-        bool toShift =(bool)(int)audioProcessor.apvts.getRawParameterValue("lfoToShift") ->load();
-        bool toCutoff=(bool)(int)audioProcessor.apvts.getRawParameterValue("lfoToCutoff")->load();
-        g.setFont(juce::Font("Georgia",7.5f,juce::Font::bold));
-        int lx2=(int)VX+4;
-        if (toMorph)  { g.setColour(ChobitsLookAndFeel::pinkAccent.withAlpha(0.85f));
-                        g.drawText("LFO\xe2\x86\x92MORPH", lx2,(int)VY+6,90,11,juce::Justification::left); lx2+=94; }
-        if (toShift)  { g.setColour(ChobitsLookAndFeel::starGold.withAlpha(0.85f));
-                        g.drawText("LFO\xe2\x86\x92SHIFT", lx2,(int)VY+6,90,11,juce::Justification::left); lx2+=94; }
-        if (toCutoff) { g.setColour(ChobitsLookAndFeel::hairGold.withAlpha(0.85f));
-                        g.drawText("LFO\xe2\x86\x92CUTOFF",lx2,(int)VY+6,90,11,juce::Justification::left); }
+        bool toMorph  = (bool)(int)audioProcessor.apvts.getRawParameterValue("lfoToMorph")->load();
+        bool toShift  = (bool)(int)audioProcessor.apvts.getRawParameterValue("lfoToShift")->load();
+        bool toCutoff = (bool)(int)audioProcessor.apvts.getRawParameterValue("lfoToCutoff")->load();
+
+        g.setFont(juce::Font("Georgia", 7.5f, juce::Font::bold));
+        int lx2 = (int)VX + 4;
+
+        if (toMorph)
+        {
+            g.setColour(ChobitsLookAndFeel::pinkAccent.withAlpha(0.85f));
+            g.drawText("LFO\u2192MORPH", lx2, (int)VY + 6, 90, 11, juce::Justification::left);
+            lx2 += 94;
+        }
+        if (toShift)
+        {
+            g.setColour(ChobitsLookAndFeel::starGold.withAlpha(0.85f));
+            g.drawText("LFO\u2192SHIFT", lx2, (int)VY + 6, 90, 11, juce::Justification::left);
+            lx2 += 94;
+        }
+        if (toCutoff)
+        {
+            g.setColour(ChobitsLookAndFeel::hairGold.withAlpha(0.85f));
+            g.drawText("LFO\u2192CUTOFF", lx2, (int)VY + 6, 90, 11, juce::Justification::left);
+        }
     }
 
     // ---- Vowel labels at sides ----
     {
-        int v1=juce::jlimit(0,11,(int)audioProcessor.apvts.getRawParameterValue("vowel1")->load());
-        int v2=juce::jlimit(0,11,(int)audioProcessor.apvts.getRawParameterValue("vowel2")->load());
-        g.setFont(juce::Font("Georgia",10.f,juce::Font::bold|juce::Font::italic));
+        int v1 = juce::jlimit(0, 11, (int)audioProcessor.apvts.getRawParameterValue("vowel1")->load());
+        int v2 = juce::jlimit(0, 11, (int)audioProcessor.apvts.getRawParameterValue("vowel2")->load());
+
+        g.setFont(juce::Font("Georgia", 10.f, juce::Font::bold | juce::Font::italic));
         g.setColour(ChobitsLookAndFeel::starGold.withAlpha(0.80f));
-        g.drawText(juce::String(kVowelNames[v1]),(int)VX+4,(int)(VY+VH/2.f-8.f),20,16,
+        g.drawText(juce::String(kVowelNames[v1]),
+                   (int)VX + 4, (int)(VY + VH / 2.f - 8.f), 20, 16,
                    juce::Justification::left);
+
         g.setColour(ChobitsLookAndFeel::pinkAccent.withAlpha(0.80f));
-        g.drawText(juce::String(kVowelNames[v2]),(int)(VX+VW-24.f),(int)(VY+VH/2.f-8.f),20,16,
+        g.drawText(juce::String(kVowelNames[v2]),
+                   (int)(VX + VW - 24.f), (int)(VY + VH / 2.f - 8.f), 20, 16,
                    juce::Justification::right);
     }
 
     // ---- Env level bar at bottom of visualiser ----
     {
-        float env=audioProcessor.getEnvelopeLevel();
-        float barW=VW*juce::jlimit(0.f,1.f,env*6.f);
+        float env = audioProcessor.getEnvelopeLevel();
+        float barW = VW * juce::jlimit(0.f, 1.f, env * 6.f);
+
         g.setColour(ChobitsLookAndFeel::pinkAccent.withAlpha(0.15f));
-        g.fillRect(VX,VY+VH-4.f,VW,4.f);
-        if (barW>1.f) {
+        g.fillRect(VX, VY + VH - 4.f, VW, 4.f);
+
+        if (barW > 1.f)
+        {
             juce::ColourGradient bar(
-                ChobitsLookAndFeel::pinkAccent.withAlpha(0.75f),VX,VY+VH,
-                ChobitsLookAndFeel::starGold.withAlpha(0.75f),VX+VW,VY+VH,false);
+                ChobitsLookAndFeel::pinkAccent.withAlpha(0.75f), VX, VY + VH,
+                ChobitsLookAndFeel::starGold.withAlpha(0.75f), VX + VW, VY + VH, false);
+
             g.setGradientFill(bar);
-            g.fillRect(VX,VY+VH-4.f,barW,4.f);
+            g.fillRect(VX, VY + VH - 4.f, barW, 4.f);
         }
     }
 
     // ---- Outer border glow ----
     {
-        float glowA=0.3f+0.2f*std::sin(animPhase);
+        float glowA = 0.3f + 0.2f * std::sin(animPhase);
         g.setColour(ChobitsLookAndFeel::pinkAccent.withAlpha(glowA));
-        g.drawRoundedRectangle(vBounds.reduced(0.5f),8.f,1.5f);
-    }
-}
-
-//==============================================================================
-void PersoFormantAudioProcessorEditor::drawEnvelopeMeter(juce::Graphics& g)
-{
-    float env=audioProcessor.getEnvelopeLevel();
-    float mx=978.f,my=192.f,mW=8.f,mH=56.f;
-    g.setColour(ChobitsLookAndFeel::bgDeep.withAlpha(0.7f));
-    g.fillRoundedRectangle(mx,my,mW,mH,3.f);
-    g.setColour(ChobitsLookAndFeel::pinkAccent.withAlpha(0.35f));
-    g.drawRoundedRectangle(mx,my,mW,mH,3.f,1.f);
-    float fillH=juce::jlimit(0.f,mH,env*mH*8.f);
-    if (fillH>0.5f) {
-        juce::ColourGradient fill(ChobitsLookAndFeel::pinkAccent,mx,my+mH,
-                                   ChobitsLookAndFeel::starGold,mx,my,false);
-        g.setGradientFill(fill); g.fillRoundedRectangle(mx,my+mH-fillH,mW,fillH,3.f);
+        g.drawRoundedRectangle(vBounds.reduced(0.5f), 8.f, 1.5f);
     }
 }
 
