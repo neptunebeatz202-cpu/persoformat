@@ -613,6 +613,123 @@ float PersoFormantAudioProcessorEditor::evalFormantResponse(
     return totalDB;
 }
 
+// Central morph visualiser — replaces the old tiny ring.
+// Draws two overlapping vowel formant "clouds" that blend with the morph value,
+// plus a rotating LFO indicator ring around them.
+void PersoFormantAudioProcessorEditor::drawMorphVisualiser (juce::Graphics& g)
+{
+    // Centre of the visualiser (sits in the middle of the plugin between Chi's panels)
+    const float cx = 500.f, cy = 245.f, R = 55.f;
+
+    float morph   = audioProcessor.getSmoothedMorph();
+    float lfoPhase= audioProcessor.getLfoPhase();
+    float env     = audioProcessor.getEnvelopeLevel();
+
+    // ---- Outer pulsing ring (env-reactive) ----
+    float envPulse = 1.f + env * 0.35f;
+    {
+        juce::ColourGradient ringGrad (
+            ChobitsLookAndFeel::pinkAccent.withAlpha(0.25f + env*0.4f), cx, cy,
+            ChobitsLookAndFeel::starGold.withAlpha(0.05f), cx+R*envPulse, cy, true);
+        g.setGradientFill (ringGrad);
+        g.fillEllipse (cx-R*envPulse, cy-R*envPulse, R*2.f*envPulse, R*2.f*envPulse);
+    }
+
+    // ---- Vowel A blob (fades out as morph → 1) ----
+    {
+        float alpha = (1.f - morph) * 0.55f + 0.05f;
+        juce::ColourGradient blob (
+            ChobitsLookAndFeel::starGold.withAlpha(alpha), cx-R*0.35f, cy,
+            ChobitsLookAndFeel::starGold.withAlpha(0.f),   cx-R*0.35f-R*0.7f, cy, true);
+        g.setGradientFill (blob);
+        g.fillEllipse (cx-R*1.05f, cy-R*0.7f, R*1.4f, R*1.4f);
+    }
+
+    // ---- Vowel B blob (fades in as morph → 1) ----
+    {
+        float alpha = morph * 0.55f + 0.05f;
+        juce::ColourGradient blob (
+            ChobitsLookAndFeel::pinkAccent.withAlpha(alpha), cx+R*0.35f, cy,
+            ChobitsLookAndFeel::pinkAccent.withAlpha(0.f),   cx+R*0.35f+R*0.7f, cy, true);
+        g.setGradientFill (blob);
+        g.fillEllipse (cx-R*0.35f, cy-R*0.7f, R*1.4f, R*1.4f);
+    }
+
+    // ---- Three formant frequency arcs (concentric rings per band) ----
+    // Use current smoothed morph to display which frequencies are active
+    int v1 = juce::jlimit(0,11, (int)audioProcessor.apvts.getRawParameterValue("vowel1")->load());
+    int v2 = juce::jlimit(0,11, (int)audioProcessor.apvts.getRawParameterValue("vowel2")->load());
+    for (int k=0; k<3; ++k)
+    {
+        float f1 = kVowelFormants[v1].freq[k];
+        float f2 = kVowelFormants[v2].freq[k];
+        float f  = f1 + morph*(f2-f1);
+        // Map 200-3200 Hz to ring radius 10-50
+        float norm = juce::jlimit(0.f,1.f, (std::log(f)-std::log(200.f)) / (std::log(3200.f)-std::log(200.f)));
+        float rk   = 10.f + norm*(R-12.f);
+        float pulse = 1.f + 0.06f*std::sin(animPhase*2.f + k*2.1f);
+        rk *= pulse;
+
+        juce::Colour bandCol = (k==0) ? ChobitsLookAndFeel::pinkAccent
+                             : (k==1) ? ChobitsLookAndFeel::starGold
+                                      : ChobitsLookAndFeel::hairGold;
+        float gDB = kVowelFormants[v1].gain[k] + morph*(kVowelFormants[v2].gain[k]-kVowelFormants[v1].gain[k]);
+        float bandAlpha = juce::jmap(gDB, 0.f, 20.f, 0.15f, 0.75f);
+
+        g.setColour (bandCol.withAlpha(bandAlpha));
+        g.drawEllipse (cx-rk, cy-rk, rk*2.f, rk*2.f, 1.8f);
+
+        // Small label at right edge of each ring
+        g.setFont (juce::Font("Georgia", 7.f, juce::Font::plain));
+        g.setColour (bandCol.withAlpha(0.7f));
+        juce::String fStr = juce::String((int)f) + "Hz";
+        g.drawText (fStr, (int)(cx+rk-16.f), (int)(cy-5.f), 32, 11,
+                    juce::Justification::centred);
+    }
+
+    // ---- Dark backing disc so arcs read clearly ----
+    g.setColour (ChobitsLookAndFeel::bgDeep.withAlpha(0.55f));
+    g.fillEllipse (cx-R*0.55f, cy-R*0.55f, R*1.1f, R*1.1f);
+
+    // ---- LFO rotating dot on outermost ring ----
+    {
+        float dotR = R + 7.f;
+        float dotX = cx + dotR*std::cos(lfoPhase - juce::MathConstants<float>::halfPi);
+        float dotY = cy + dotR*std::sin(lfoPhase - juce::MathConstants<float>::halfPi);
+
+        // Trailing arc
+        juce::Path trail;
+        trail.addArc (cx-dotR, cy-dotR, dotR*2.f, dotR*2.f,
+                      lfoPhase - juce::MathConstants<float>::halfPi - 1.2f,
+                      lfoPhase - juce::MathConstants<float>::halfPi, true);
+        g.setColour (ChobitsLookAndFeel::starGold.withAlpha(0.55f));
+        g.strokePath (trail, juce::PathStrokeType(2.f, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+
+        // Dot
+        g.setColour (ChobitsLookAndFeel::pinkAccent);
+        g.fillEllipse (dotX-4.f, dotY-4.f, 8.f, 8.f);
+        g.setColour (juce::Colours::white.withAlpha(0.9f));
+        g.fillEllipse (dotX-1.8f, dotY-1.8f, 3.6f, 3.6f);
+    }
+
+    // ---- Morph needle in centre ----
+    {
+        float needleAngle = -juce::MathConstants<float>::halfPi + morph*juce::MathConstants<float>::pi;
+        float nx = cx + (R*0.45f)*std::cos(needleAngle);
+        float ny = cy + (R*0.45f)*std::sin(needleAngle);
+        g.setColour (ChobitsLookAndFeel::hairGold.withAlpha(0.85f));
+        g.drawLine (cx, cy, nx, ny, 2.2f);
+        g.setColour (ChobitsLookAndFeel::pinkAccent);
+        g.fillEllipse (cx-3.5f, cy-3.5f, 7.f, 7.f);
+    }
+
+    // ---- "MORPH" text ----
+    g.setFont (juce::Font("Georgia", 8.f, juce::Font::bold));
+    g.setColour (ChobitsLookAndFeel::hairGold.withAlpha(0.7f));
+    g.drawText ("MORPH", (int)(cx-20.f), (int)(cy+R+10.f), 40, 12, juce::Justification::centred);
+}
+
 //==============================================================================
 void PersoFormantAudioProcessorEditor::drawEnvelopeMeter(juce::Graphics& g)
 {
