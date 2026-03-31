@@ -615,7 +615,6 @@ float PersoFormantAudioProcessorEditor::evalFormantResponse(
 
 //==============================================================================
 // THE NEW VISUALISER — full frequency-response curve
-void PersoFormantAudioProcessorEditor::drawSpectrumVisualiser(juce::Graphics& g)
 {
     const float VX = 218.f, VY = 10.f, VW = 564.f, VH = 310.f;
     const juce::Rectangle<float> vBounds(VX, VY, VW, VH);
